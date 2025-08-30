@@ -1,25 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kushagra Suryawanshi</title>
-    <link rel="shortcut icon" href="kushagra.jpg" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="container">
-      <img class="a" src="kjack.jpg" alt="" />
-      <br />
-      <img class="b" src="text.png" alt="" />
-    </div>
+<head>
+  <meta charset="UTF-8" />
+  <title>YouTube Shorts Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --c:#0ff; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin:0; height:100%; background:#000; color:var(--c);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    #wrap { display:flex; flex-direction:column; align-items:center; gap:12px; }
+    #player {
+      width: 90vw; max-width: 450px; height: 80vh; background:#111; border-radius:10px; overflow:hidden;
+      box-shadow: 0 0 24px rgba(0,255,255,.25);
+    }
+    .controls { display:flex; gap:12px; justify-content:center; }
+    button {
+      padding:10px 20px; font-size:1rem; cursor:pointer; border:none; border-radius:8px;
+      background:var(--c); color:#000; font-weight:700;
+    }
+    #overlay {
+      position: fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background: rgba(0,0,0,.7); z-index: 10;
+    }
+    #overlay button {
+      padding:14px 28px; font-size:1.1rem; border-radius:12px; box-shadow:0 0 30px rgba(0,255,255,.4);
+    }
+    /* Fallback message if JS disabled */
+    noscript { color:#fff; }
+  </style>
+</head>
+<body>
+  <div id="overlay"><button id="startBtn">▶️ Start with Sound</button></div>
 
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        document.addEventListener("click", () => {
-          window.location.href = "index2.html";
-        });
+  <div id="wrap">
+    <div id="player"></div>
+    <div class="controls">
+      <button onclick="prevVideo()">⏮ Prev</button>
+      <button onclick="togglePlay()">⏯ Play/Pause</button>
+      <button onclick="nextVideo()">⏭ Next</button>
+    </div>
+  </div>
+
+  <noscript>Please enable JavaScript to play videos.</noscript>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    // You can paste EITHER full Shorts links OR bare IDs here. We'll parse them.
+    const sources = [
+      "https://www.youtube.com/shorts/_GSZ7IVtd_Y",
+      "https://www.youtube.com/shorts/SDSKQFh8AL0",
+      "https://www.youtube.com/shorts/ocrXKquTamQ",
+      "https://www.youtube.com/shorts/1c9Fln4U8oM"
+      // or just "_GSZ7IVtd_Y", "SDSKQFh8AL0", ...
+    ];
+
+    function extractId(s) {
+      if (!s) return null;
+      // Handle various YouTube formats
+      try {
+        if (/^https?:\/\//i.test(s)) {
+          const u = new URL(s);
+          // youtu.be/<id>
+          if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
+          // /shorts/<id>
+          const shorts = u.pathname.match(/\/shorts\/([A-Za-z0-9_-]{6,})/);
+          if (shorts) return shorts[1];
+          // /embed/<id>
+          const embed = u.pathname.match(/\/embed\/([A-Za-z0-9_-]{6,})/);
+          if (embed) return embed[1];
+          // ?v=<id>
+          const v = u.searchParams.get('v');
+          if (v) return v;
+        }
+        // assume already an ID
+        return s;
+      } catch {
+        return s;
+      }
+    }
+
+    const videoIds = sources.map(extractId).filter(Boolean);
+
+    let currentIndex = 0;
+    let player = null;
+    let apiReady = false;
+
+    // Make the API callback definitely global
+    window.onYouTubeIframeAPIReady = function() {
+      apiReady = true;
+      player = new YT.Player("player", {
+        // We’ll set the first video after the user clicks Start (to allow sound)
+        videoId: videoIds[0],
+        playerVars: {
+          autoplay: 0,         // start only after click for sound
+          controls: 1,
+          rel: 0,
+          playsinline: 1       // better behavior on iOS
+        },
+        events: { onStateChange: onPlayerStateChange, onReady: onPlayerReady }
       });
-    </script>
-  </body>
+    };
+
+    function onPlayerReady() {
+      // Wait for user to click "Start" so audio is allowed
+    }
+
+    function onPlayerStateChange(e) {
+      if (e.data === YT.PlayerState.ENDED) nextVideo();
+    }
+
+    function loadAndPlay(index) {
+      currentIndex = (index + videoIds.length) % videoIds.length;
+      player.loadVideoById({ videoId: videoIds[currentIndex], startSeconds: 0, suggestedQuality: 'hd720' });
+      // ensure sound
+      try { player.unMute(); } catch {}
+      player.playVideo();
+    }
+
+    function nextVideo(){ loadAndPlay(currentIndex + 1); }
+    function prevVideo(){ loadAndPlay(currentIndex - 1); }
+
+    function togglePlay() {
+      const st = player.getPlayerState();
+      if (st === YT.PlayerState.PLAYING) player.pauseVideo();
+      else player.playVideo();
+    }
+
+    // Start overlay to unlock audio autoplay
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    startBtn.addEventListener('click', () => {
+      overlay.style.display = 'none';
+      if (apiReady && player) {
+        loadAndPlay(currentIndex);
+      } else {
+        // In the unlikely event API is still loading, try again very shortly
+        const tid = setInterval(() => {
+          if (apiReady && player) {
+            clearInterval(tid);
+            loadAndPlay(currentIndex);
+          }
+        }, 50);
+      }
+    });
+  </script>
+</body>
 </html>
