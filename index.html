@@ -2,150 +2,119 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>YouTube Shorts Player</title>
+  <title>Video Player</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
   <style>
-    :root { --c:#0ff; }
-    * { box-sizing: border-box; }
-    html, body {
-      margin:0; height:100%; background:#000; color:var(--c);
-      display:flex; flex-direction:column; align-items:center; justify-content:center;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+
+    /* Video fills the viewport; hidden until it starts */
+    #playerWrap { position:fixed; inset:0; display:none; }
+    #playerWrap iframe { width:100%; height:100%; border:0; display:block; }
+
+    /* Single centered red button layer */
+    #clickLayer {
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:#000;
     }
-    #wrap { display:flex; flex-direction:column; align-items:center; gap:12px; }
-    #player {
-      width: 90vw; max-width: 450px; height: 80vh; background:#111; border-radius:10px; overflow:hidden;
-      box-shadow: 0 0 24px rgba(0,255,255,.25);
+    .playBut { display:inline-block; width:214px; height:214px; cursor:pointer; background:transparent; border:0; }
+
+    .triangle {
+      transition: stroke-dashoffset .7s ease-in-out, stroke .3s ease-in-out, transform .7s ease-in-out;
+      stroke-dasharray:240; stroke-dashoffset:480; stroke:#000; fill:none; stroke-width:7;
+      stroke-linecap:round; stroke-linejoin:round; stroke-miterlimit:10;
     }
-    .controls { display:flex; gap:12px; justify-content:center; }
-    button {
-      padding:10px 20px; font-size:1rem; cursor:pointer; border:none; border-radius:8px;
-      background:var(--c); color:#000; font-weight:700;
+    .circle {
+      stroke:#e32636; stroke-dasharray:650; stroke-dashoffset:650; opacity:.35;
+      transition: stroke-dashoffset .5s ease-in-out, opacity .3s ease-in-out;
+      fill:none; stroke-width:7; stroke-linecap:round; stroke-linejoin:round; stroke-miterlimit:10;
     }
-    #overlay {
-      position: fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background: rgba(0,0,0,.7); z-index: 10;
+    .playBut:hover .triangle { stroke-dashoffset:0; opacity:1; stroke:#ff4d4d; animation:nudge .7s ease-in-out; }
+    .playBut:hover .circle { stroke-dashoffset:0; opacity:1; }
+
+    @keyframes nudge {
+      0% { transform:translateX(0) } 30% { transform:translateX(-5px) }
+      50% { transform:translateX(5px) } 70% { transform:translateX(-2px) } 100% { transform:translateX(0) }
     }
-    #overlay button {
-      padding:14px 28px; font-size:1.1rem; border-radius:12px; box-shadow:0 0 30px rgba(0,255,255,.4);
-    }
-    /* Fallback message if JS disabled */
-    noscript { color:#fff; }
   </style>
 </head>
 <body>
-  <div id="overlay"><button id="startBtn">▶️ Start with Sound</button></div>
 
-  <div id="wrap">
-    <div id="player"></div>
-    <div class="controls">
-      <button onclick="prevVideo()">⏮ Prev</button>
-      <button onclick="togglePlay()">⏯ Play/Pause</button>
-      <button onclick="nextVideo()">⏭ Next</button>
-    </div>
+  <!-- One red button only -->
+  <div id="clickLayer">
+    <button id="playBtn" class="playBut" aria-label="Play video" title="Play">
+      <svg width="213.7" height="213.7" viewBox="0 0 213.7 213.7" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+        <polygon class="triangle" points="73.5,62.5 148.5,105.8 73.5,149.1"></polygon>
+        <circle class="circle" cx="106.8" cy="106.8" r="103.3"></circle>
+      </svg>
+    </button>
   </div>
 
-  <noscript>Please enable JavaScript to play videos.</noscript>
+  <!-- YouTube player will be created here -->
+  <div id="playerWrap"><div id="player"></div></div>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
-    // You can paste EITHER full Shorts links OR bare IDs here. We'll parse them.
-    const sources = [
-      "https://www.youtube.com/shorts/_GSZ7IVtd_Y",
-      "https://www.youtube.com/shorts/SDSKQFh8AL0",
-      "https://www.youtube.com/shorts/ocrXKquTamQ",
-      "https://www.youtube.com/shorts/1c9Fln4U8oM"
-      // or just "_GSZ7IVtd_Y", "SDSKQFh8AL0", ...
-    ];
+    // Your Shorts ID
+    const VIDEO_ID = "_GSZ7IVtd_Y";
 
-    function extractId(s) {
-      if (!s) return null;
-      // Handle various YouTube formats
-      try {
-        if (/^https?:\/\//i.test(s)) {
-          const u = new URL(s);
-          // youtu.be/<id>
-          if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
-          // /shorts/<id>
-          const shorts = u.pathname.match(/\/shorts\/([A-Za-z0-9_-]{6,})/);
-          if (shorts) return shorts[1];
-          // /embed/<id>
-          const embed = u.pathname.match(/\/embed\/([A-Za-z0-9_-]{6,})/);
-          if (embed) return embed[1];
-          // ?v=<id>
-          const v = u.searchParams.get('v');
-          if (v) return v;
-        }
-        // assume already an ID
-        return s;
-      } catch {
-        return s;
-      }
+    const playBtn = document.getElementById("playBtn");
+    const clickLayer = document.getElementById("clickLayer");
+    const playerWrap = document.getElementById("playerWrap");
+    let player, apiLoaded = false, started = false;
+
+    function loadYTAPI() {
+      if (apiLoaded) return;
+      apiLoaded = true;
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
     }
 
-    const videoIds = sources.map(extractId).filter(Boolean);
-
-    let currentIndex = 0;
-    let player = null;
-    let apiReady = false;
-
-    // Make the API callback definitely global
-    window.onYouTubeIframeAPIReady = function() {
-      apiReady = true;
+    // YouTube API callback
+    window.onYouTubeIframeAPIReady = function () {
       player = new YT.Player("player", {
-        // We’ll set the first video after the user clicks Start (to allow sound)
-        videoId: videoIds[0],
+        videoId: VIDEO_ID,
         playerVars: {
-          autoplay: 0,         // start only after click for sound
-          controls: 1,
+          autoplay: 1,
+          controls: 0,
+          loop: 1,
+          playlist: VIDEO_ID,     // required for looping single video
           rel: 0,
-          playsinline: 1       // better behavior on iOS
+          playsinline: 1,
+          modestbranding: 1
         },
-        events: { onStateChange: onPlayerStateChange, onReady: onPlayerReady }
+        events: {
+          onReady: (e) => {
+            try {
+              e.target.unMute();
+              e.target.playVideo(); // user-gesture path
+              // Make sure autoplay permission is set on the iframe
+              const ifr = e.target.getIframe();
+              ifr.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+            } catch (_) {}
+          },
+          onStateChange: (e) => {
+            if (!started && e.data === YT.PlayerState.PLAYING) {
+              started = true;
+              clickLayer.style.display = "none";
+              playerWrap.style.display = "block";
+            }
+          }
+        }
       });
     };
 
-    function onPlayerReady() {
-      // Wait for user to click "Start" so audio is allowed
-    }
+    // Click → load API, build player, and start
+    playBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      loadYTAPI();
 
-    function onPlayerStateChange(e) {
-      if (e.data === YT.PlayerState.ENDED) nextVideo();
-    }
-
-    function loadAndPlay(index) {
-      currentIndex = (index + videoIds.length) % videoIds.length;
-      player.loadVideoById({ videoId: videoIds[currentIndex], startSeconds: 0, suggestedQuality: 'hd720' });
-      // ensure sound
-      try { player.unMute(); } catch {}
-      player.playVideo();
-    }
-
-    function nextVideo(){ loadAndPlay(currentIndex + 1); }
-    function prevVideo(){ loadAndPlay(currentIndex - 1); }
-
-    function togglePlay() {
-      const st = player.getPlayerState();
-      if (st === YT.PlayerState.PLAYING) player.pauseVideo();
-      else player.playVideo();
-    }
-
-    // Start overlay to unlock audio autoplay
-    const overlay = document.getElementById('overlay');
-    const startBtn = document.getElementById('startBtn');
-    startBtn.addEventListener('click', () => {
-      overlay.style.display = 'none';
-      if (apiReady && player) {
-        loadAndPlay(currentIndex);
-      } else {
-        // In the unlikely event API is still loading, try again very shortly
-        const tid = setInterval(() => {
-          if (apiReady && player) {
-            clearInterval(tid);
-            loadAndPlay(currentIndex);
-          }
-        }, 50);
-      }
+      // Safety fallback: if autoplay gets blocked, open in a new tab
+      setTimeout(() => {
+        if (!started) {
+          window.open(`https://www.youtube.com/watch?v=${VIDEO_ID}`, "_blank", "noopener");
+        }
+      }, 2000);
     });
   </script>
 </body>
