@@ -1,5 +1,7 @@
 FROM oven/bun:1-alpine
 
+ARG DB_URL
+
 WORKDIR /usr/src/app
 
 COPY package.json bun.lock ./
@@ -13,7 +15,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 RUN bun run db:generate
-RUN bun run build:frontend
+RUN DATABASE_URL=$DB_URL bunx turbo build --filter=web...
 
 EXPOSE 3001
 
