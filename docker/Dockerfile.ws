@@ -1,18 +1,34 @@
-FROM oven/bun:1-alpine
+FROM oven/bun:1.3.14-alpine AS base
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-COPY package.json bun.lock ./
-
-COPY apps/ws/package.json apps/ws/package.json
-COPY packages/db/package.json packages/db/package.json
-
-RUN bun install --frozen-lockfile 
-
+FROM base AS pruner
 COPY . .
+RUN bunx turbo@2.10.5 prune @repo/ws --docker
 
+FROM base AS installer
+COPY --from=pruner /app/out/json .
+COPY --from=pruner /app/out/bun.lock ./bun.lock
+RUN bun install --frozen-lockfile
+
+FROM installer AS builder
+COPY --from=pruner /app/out/full .
 RUN bun run db:generate
+
+FROM base AS production-dependencies
+COPY --from=pruner /app/out/json .
+COPY --from=pruner /app/out/bun.lock ./bun.lock
+RUN bun install --frozen-lockfile --production
+
+FROM base AS runner
+ENV NODE_ENV=production
+COPY --from=production-dependencies --chown=bun:bun  /app/node_modules ./node_modules
+COPY --from=builder --chown=bun:bun /app/package.json ./package.json
+COPY --from=builder --chown=bun:bun /app/apps/ws ./apps/ws
+COPY --from=builder --chown=bun:bun /app/packages/db ./packages/db
+
+USER bun
 
 EXPOSE 3002
 
-CMD [ "bun", "run", "start:ws" ]
+CMD ["bun", "run", "start:ws"]

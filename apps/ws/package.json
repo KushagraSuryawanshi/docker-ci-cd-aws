@@ -1,5 +1,5 @@
 {
-  "name": "ws",
+  "name": "@repo/ws",
   "module": "index.ts",
   "type": "module",
   "private": true,
