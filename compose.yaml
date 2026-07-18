@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -19,49 +19,49 @@ services:
       dockerfile: docker/Dockerfile.backend
       target: migrator
     environment:
-      DATABASE_URL: postgresql://postgres:mysecretpassword@postgres:5432/postgres
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
   backend:
-    build: 
+    build:
       context: .
       dockerfile: docker/Dockerfile.backend
       target: runner
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:mysecretpassword@postgres:5432/postgres
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
-  
+
   ws:
-    build: 
+    build:
       context: .
       dockerfile: docker/Dockerfile.ws
       target: runner
     ports:
       - "3002:3002"
     environment:
-      - DATABASE_URL=postgresql://postgres:mysecretpassword@postgres:5432/postgres
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
-  
+
   frontend:
-    build: 
+    build:
       context: .
       dockerfile: docker/Dockerfile.frontend
       target: runner
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgresql://postgres:mysecretpassword@postgres:5432/postgres
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       migrate:
         condition: service_completed_successfully
