@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-  pull request:
+  pull_request:
     branches: [main]
 
 jobs:
@@ -21,3 +21,17 @@ jobs:
       
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Generate prisma client
+        run: bun run db:generate
+
+      - name: Type check
+        run: bun run check-types
+      
+      - name: Lint
+        run: bun run lint
+      
+      - name: Build
+        run: bun run build
+
+  
