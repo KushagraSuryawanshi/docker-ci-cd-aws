@@ -186,3 +186,19 @@ jobs:
 
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts 
           chmod 600 ~/.ssh/known_hosts
+        
+      - name: Copy production Compose file
+        run: |
+          scp -i ~/.ssh/deploy_key compose.prod.yaml "${{secrets.EC2_USER}}@${{secrets.EC2_HOST}}:/opt/21-07-monorepo/compose.prod.yaml"
+
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{secrets.EC2_USER}}@{{secrets.EC2_HOST}}" 'cd /opt/21-07-monorepo && pwd && ls -la'
+
+      - name: Deploy to EC2_HOST
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{secrets.EC2_USER}}@${{EC2_HOST}}" "cd /opt/21-07-monorepo && \
+          export IMAGE_TAG='${{github.sha}}' && \
+          docker compose --env-file .env.production -f compose.prod.yaml pull && \
+          docker compose --env-file .env.production -f compose.prod.yaml run --rm migrate && \
+          docker compsoe --env-file .env.production -f compose.prod.yaml up -d --no-deps backend ws frontend "
