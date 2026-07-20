@@ -201,4 +201,4 @@ jobs:
           export IMAGE_TAG='${{github.sha}}' && \
           docker compose --env-file .env.production -f compose.prod.yaml pull && \
           docker compose --env-file .env.production -f compose.prod.yaml run --rm migrate && \
-          docker compsoe --env-file .env.production -f compose.prod.yaml up -d --no-deps backend ws frontend "
+          docker compose --env-file .env.production -f compose.prod.yaml up -d --no-deps backend ws frontend "
